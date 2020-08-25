@@ -4,14 +4,17 @@ dbl x = \f -> f (2 * x)
 hlv :: Int -> (Int -> Int) -> Int
 hlv x = \f -> f (x `div` 2)
 
-kmap f mw = \cont -> mw (\t -> cont (f t))
+newtype Cont r a = Cont {runCont :: (a -> r) -> r }
 
-kres = kmap (\t -> t * 8) $ hlv 6
+instance Functor (Cont r) where
+    fmap fn (Cont inC) = Cont $ \out -> inC (out . fn)
 
-kpure part = \cont -> cont part
+instance Applicative (Cont r) where
+    pure val = Cont $ \out -> out val
+    (Cont fnC) <*> (Cont inC) = Cont $ \out -> fnC(\fn -> inC(out . fn))
 
-x = kpure 3
+instance Monad (Cont r) where
+    return = pure
+    (Cont inC) >>= fn = Cont $ \out -> inC(\a -> runCont(fn a) out)
 
-kap fnC inC = \cont -> fnC $ \fn -> inC(cont . fn)
-
-y = kap (dbl 6) (dbl 5)
+callCC :: ((a -> Cont r b)) -> Cont r a) -> Cont r a
