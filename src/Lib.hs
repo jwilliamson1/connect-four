@@ -74,6 +74,16 @@ detectFilled b = all columnFull b
               Nothing -> False
               _ -> True
 
+detectWin :: [Space] -> Player -> (Int, [Int])
+detectWin sps pl = foldl' accumRun (0, []) sps
+  where accumRun :: (Int, [Int]) -> Space -> (Int, [Int])
+        accumRun (count, run) sp = let alreadyWon = (length run) >= 4
+                                   in case sp of
+                                     Nothing -> (count, run)
+                                     Just aplayer -> if pl == aplayer 
+                                                     then (count + 1, 1 : run)
+                                                     else (count, run)
+
 printEitherBoard :: Either [Char] Board -> IO ()
 printEitherBoard x = case x of Left err -> putStrLn err; Right b -> printBoard b
 
