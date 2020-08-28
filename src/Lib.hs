@@ -74,15 +74,33 @@ detectFilled b = all columnFull b
               Nothing -> False
               _ -> True
 
-detectWin :: [Space] -> Player -> (Int, [Int])
-detectWin sps pl = foldl' accumRun (0, []) sps
-  where accumRun :: (Int, [Int]) -> Space -> (Int, [Int])
-        accumRun (count, run) sp = let alreadyWon = (length run) >= 4
-                                   in case sp of
-                                     Nothing -> (count, run)
-                                     Just aplayer -> if pl == aplayer 
-                                                     then (count + 1, 1 : run)
-                                                     else (count, run)
+boardHasWin :: Player -> Board -> Maybe (Int, [Int])
+boardHasWin p b = let checker = lineHasWin p
+                    in let maybeWins = fmap checker b
+                        in head $ filter hasWin maybeWins
+                        where 
+                            hasWin :: Maybe (Int, [Int]) -> Bool
+                            hasWin m = case m of
+                                Just _ -> True
+                                Nothing -> False
+
+lineHasWin :: Player -> [Space] -> Maybe (Int, [Int])
+lineHasWin p sps =
+  let res = detectWin p (zip sps [1 ..])
+   in if fst res > 4 then Just res else Nothing
+
+detectWin :: Player -> [(Space, Int)] -> (Int, [Int])
+detectWin pl sps = foldl' accumRun (0, []) sps
+  where
+    accumRun :: (Int, [Int]) -> (Space, Int) -> (Int, [Int])
+    accumRun (count, run) sp =
+      let alreadyWon = (length run) >= 4
+       in case sp of
+            (Nothing, _) -> (count, run)
+            (Just aplayer, pos) ->
+              if pl == aplayer
+                then (count + 1, pos : run)
+                else (count, run)
 
 printEitherBoard :: Either [Char] Board -> IO ()
 printEitherBoard x = case x of Left err -> putStrLn err; Right b -> printBoard b
@@ -96,5 +114,6 @@ e3 = do
     e1 <- addToken b' 1 $ p1
     e2 <- addToken e1 1 $ p2
     addToken e2 0 p1
-
+fp1 = fillBoard b' p1
+fp2 = fillBoard b' p2
 res = case e3 of Left l -> putStrLn l; Right r -> printBoard r
