@@ -1,3 +1,7 @@
+module Kont
+    (
+    ) where
+
 dbl :: Int -> (Int -> Int) -> Int
 dbl x = \f -> f (2 * x)
 

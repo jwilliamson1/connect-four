@@ -15,16 +15,46 @@ type Board = [[Space]]
 start :: IO ()
 start = playLoop Play
 
--- Play GameOver 
-
 playLoop :: PlayState -> IO ()
-playLoop prevState = do
-    putStrLn "Enter 'y' to continue or any other key to stop."
+playLoop End = putStrLn "Thanks for playing!"
+playLoop Play = do
+    let p1 = Player1 'x'
+    let p2 = Player2 'y'
+    playGame p1 p2 createBoard
+    putStrLn "GAME OVER."
+    putStrLn "Enter 'y' to play again or any other key to stop."
     continue <- getLine
     let newState = if head continue == 'y' then Play else End
-    case newState of
-        End -> putStrLn "Thanks for playing!"
-        Play -> playLoop Play
+    playLoop newState
+
+playGame :: Player -> Player -> Board -> IO ()
+playGame t1 t2 b =
+                     if detectFilled b
+                        then do
+                            putStrLn "IT'S A TIE! NO MORE SPACES AVAILABLE!"
+                            printBoard b
+                        else
+                            do
+                                putStrLn $ show t1 ++ " enter column 0-5 to which to add."
+                                move <- readLn :: IO Int
+                                b'<- retryingAddToken b move t1
+                                let maybeWin = boardHasWin t1 b'
+                                case maybeWin of 
+                                    (Just (runLength, positions)) -> do
+                                        putStrLn $ show t1 ++ " wins!"
+                                        printBoard b'
+                                    Nothing -> do printBoard b'
+                                                  playGame t2 t1 b' 
+               
+
+retryingAddToken :: Board -> Int -> Player -> IO Board
+retryingAddToken b c p = let attempt = addToken b c p
+                         in case attempt of
+                             (Left msg) -> do
+                                 putStrLn msg
+                                 move <- readLn :: IO Int
+                                 retryingAddToken b move p
+                             (Right b) -> return b
 
 replace :: [a] -> Int -> a -> [a]
 replace [] i el = []
@@ -33,11 +63,12 @@ replace (l:ls) i el = l : replace ls (i-1) el
 
 addToken :: Board -> Int -> Player -> Either [Char] Board
 addToken board col player =
+    if col < 0 || col > 5 then Left $ show player ++ "column must be between 0 and 5." else
     let selectedColumn = board !! col
     in if canAddToColumn selectedColumn
         then Right $ replace board col $ addToColumn selectedColumn player
         else Left $ "Cannot add to column: " ++ show col
-        where canAddToColumn column = if column !! 5 == Nothing
+        where canAddToColumn column = if column !! 5 == Nothing && column /= []
                 then True
                 else False
 
@@ -73,11 +104,18 @@ detectFilled b = all columnFull b
           isPlayer sp = case sp of
               Nothing -> False
               _ -> True
-
 boardHasWin :: Player -> Board -> Maybe (Int, [Int])
-boardHasWin p b = let checker = lineHasWin p
-                    in let maybeWins = fmap checker b
-                        in head $ filter hasWin maybeWins
+boardHasWin p b = let colWin = columnsHaveWin p b
+                      rowWin = rowsHaveWin p b
+                      wins = [colWin, rowWin]
+                      in msum wins
+rowsHaveWin p b = columnsHaveWin p $ transpose b
+
+columnsHaveWin :: Player -> Board -> Maybe (Int, [Int])
+columnsHaveWin p b = let checkForPlayer = lineHasWin p
+                    in let maybeWins = fmap checkForPlayer b
+                           winningLines = filter hasWin maybeWins
+                           in if length winningLines > 0 then head winningLines else Nothing 
                         where 
                             hasWin :: Maybe (Int, [Int]) -> Bool
                             hasWin m = case m of
@@ -87,20 +125,21 @@ boardHasWin p b = let checker = lineHasWin p
 lineHasWin :: Player -> [Space] -> Maybe (Int, [Int])
 lineHasWin p sps =
   let res = detectWin p (zip sps [1 ..])
-   in if fst res > 4 then Just res else Nothing
+   in if fst res > 3 then Just res else Nothing
 
 detectWin :: Player -> [(Space, Int)] -> (Int, [Int])
 detectWin pl sps = foldl' accumRun (0, []) sps
   where
+    reset = (0, [])
     accumRun :: (Int, [Int]) -> (Space, Int) -> (Int, [Int])
     accumRun (count, run) sp =
       let alreadyWon = (length run) >= 4
        in case sp of
-            (Nothing, _) -> (count, run)
+            (Nothing, _) -> reset
             (Just aplayer, pos) ->
               if pl == aplayer
                 then (count + 1, pos : run)
-                else (count, run)
+                else reset
 
 printEitherBoard :: Either [Char] Board -> IO ()
 printEitherBoard x = case x of Left err -> putStrLn err; Right b -> printBoard b
