@@ -1,14 +1,14 @@
 module Lib
     ( start
     ) where
+import Control.Exception
 import Control.Monad
 import Data.List
-
+import Text.Read(readMaybe)
 data Player = Player1 Char | Player2 Char deriving (Show, Eq)
 data PlayState = Play | End
-type C4Board = [[Maybe Player]]
 type Space = Maybe Player
-type Board = [[Space]]
+type Board = [[Space]] -- a list of columns
 
 -- addChip :: Board -> Int -> a -> Boards
 -- addChip board col marker = !!
@@ -35,8 +35,8 @@ playGame t1 t2 b =
                             printBoard b
                         else
                             do
-                                putStrLn $ show t1 ++ " enter column 0-5 to which to add."
-                                move <- readLn :: IO Int
+                                putStrLn $ show t1 ++ " enter column 0-6 to which to add."
+                                move <- safeReadInt :: IO Int
                                 b'<- retryingAddToken b move t1
                                 let maybeWin = boardHasWin t1 b'
                                 case maybeWin of 
@@ -46,13 +46,22 @@ playGame t1 t2 b =
                                     Nothing -> do printBoard b'
                                                   playGame t2 t1 b' 
                
+safeReadInt :: IO Int
+safeReadInt = do 
+    str <- getLine
+    let attempt = readMaybe str :: Maybe Int
+    case attempt of
+        (Just r) -> return r
+        (_) -> do
+            putStrLn "Invalid input, must be between 0-5."
+            safeReadInt
 
 retryingAddToken :: Board -> Int -> Player -> IO Board
 retryingAddToken b c p = let attempt = addToken b c p
                          in case attempt of
                              (Left msg) -> do
                                  putStrLn msg
-                                 move <- readLn :: IO Int
+                                 move <- safeReadInt
                                  retryingAddToken b move p
                              (Right b) -> return b
 
@@ -63,7 +72,7 @@ replace (l:ls) i el = l : replace ls (i-1) el
 
 addToken :: Board -> Int -> Player -> Either [Char] Board
 addToken board col player =
-    if col < 0 || col > 5 then Left $ show player ++ "column must be between 0 and 5." else
+    if col < 0 || col > 6 then Left $ show player ++ "column must be between 0 and 6." else
     let selectedColumn = board !! col
     in if canAddToColumn selectedColumn
         then Right $ replace board col $ addToColumn selectedColumn player
@@ -77,8 +86,8 @@ addToColumn [] _ = []
 addToColumn (x:xs) marker = if x == Nothing then Just marker:xs else x : addToColumn xs marker
 
 createBoard :: Board
-createBoard = take 6 $ cycle [makeRow]
-    where makeRow = take 7 $ cycle [Nothing]
+createBoard = take 7 $ cycle [makeCol]
+    where makeCol = take 6 $ cycle [Nothing]
 
 printBoard :: Board -> IO ()
 printBoard b = mapM_ putStrLn $ fmap convertRowToString $ reverse $ transpose b
@@ -135,11 +144,11 @@ detectWin pl sps = foldl' accumRun (0, []) sps
     accumRun (count, run) sp =
       let alreadyWon = (length run) >= 4
        in case sp of
-            (Nothing, _) -> reset
+            (Nothing, _) -> if alreadyWon then (count,run) else reset
             (Just aplayer, pos) ->
               if pl == aplayer
                 then (count + 1, pos : run)
-                else reset
+                else if alreadyWon then (count,run) else reset
 
 printEitherBoard :: Either [Char] Board -> IO ()
 printEitherBoard x = case x of Left err -> putStrLn err; Right b -> printBoard b
