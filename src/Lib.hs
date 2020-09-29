@@ -1,7 +1,6 @@
 module Lib
     ( start
     ) where
-import Control.Exception
 import Control.Monad
 import Data.List
 import Text.Read(readMaybe)
@@ -116,9 +115,38 @@ detectFilled b = all columnFull b
 boardHasWin :: Player -> Board -> Maybe (Int, [Int])
 boardHasWin p b = let colWin = columnsHaveWin p b
                       rowWin = rowsHaveWin p b
-                      wins = [colWin, rowWin]
+                      diagonalLeftDownWin = diagonalLeftDownHasWin p b
+                      diagonalRightUpWin = diagonalRightUpHasWin p b
+                      wins = [colWin, rowWin, diagonalLeftDownWin, diagonalRightUpWin]
                       in msum wins
 rowsHaveWin p b = columnsHaveWin p $ transpose b
+
+diagonalLeftDownHasWin p b = diagonalRightUpHasWin p $ reverse b
+
+diagonalRightUpHasWin :: Player -> Board -> Maybe (Int, [Int])
+diagonalRightUpHasWin p b = slideRight 0 3 b
+                          where slideRight s e cols = if s == (e + 1) then Nothing
+                                else let downRes = slideDown 0 2 p cols s
+                                        in case downRes of
+                                            (Just a) -> Just a
+                                            _ -> slideRight (s + 1) e (drop 1 cols) 
+
+slideDown :: Int -> Int -> Player -> [[Space]] -> Int -> Maybe (Int, [Int])
+slideDown sr er p cols' curCol = if sr == (er + 1) then Nothing
+else let diagRes = checkDiagonal4 sr curCol p cols'
+        in case diagRes of 
+            (Just a) -> Just a
+            _ -> slideDown (sr + 1) er p (fmap tail cols') curCol 
+
+checkDiagonal4 :: Int -> Int -> Player -> [[Space]] -> Maybe (Int, [Int])
+checkDiagonal4 r c p b = let playersMatch a b c' d = a == p && b == p && c' == p && d == p
+                             c1 = b !! 0 !! 0
+                             c2 = b !! 1 !! 1
+                             c3 = b !! 2 !! 2
+                             c4 = b !! 3 !! 3
+                             in let res = playersMatch <$> c1 <*> c2 <*> c3 <*> c4
+                                in res >>= (\r' -> if r' then Just (r, [c, c+1, c+2, c+3]) else Nothing)
+
 
 columnsHaveWin :: Player -> Board -> Maybe (Int, [Int])
 columnsHaveWin p b = let checkForPlayer = lineHasWin p
@@ -165,3 +193,20 @@ e3 = do
 fp1 = fillBoard b' p1
 fp2 = fillBoard b' p2
 res = case e3 of Left l -> putStrLn l; Right r -> printBoard r
+
+dlBoard = [[Just p1, Nothing, Nothing, Nothing, Nothing, Nothing],
+                    [Just p1, Just p1, Nothing, Nothing, Nothing, Nothing],
+                    [Just p1, Nothing, Just p1, Nothing, Nothing, Nothing],
+                    [Just p1, Nothing, Nothing, Just p1, Nothing, Nothing],
+                    [Just p1, Nothing, Nothing, Nothing, Just p1, Nothing],
+                    [Just p1, Nothing, Nothing, Nothing, Nothing, Just p1],
+                    [Just p1, Nothing, Nothing, Nothing, Nothing, Nothing]]
+
+
+dl2Board = [[Just p1, Nothing, Nothing, Nothing, Nothing, Nothing],
+                    [Just p1, Just p2, Nothing, Nothing, Nothing, Nothing],
+                    [Just p1, Nothing, Just p1, Nothing, Nothing, Nothing],
+                    [Just p1, Nothing, Nothing, Just p1, Nothing, Nothing],
+                    [Just p1, Nothing, Nothing, Nothing, Just p1, Nothing],
+                    [Just p1, Nothing, Nothing, Nothing, Nothing, Just p1],
+                    [Just p1, Nothing, Nothing, Nothing, Nothing, Nothing]]
