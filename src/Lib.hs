@@ -4,7 +4,7 @@ module Lib
 import Control.Monad
 import Data.List
 import Text.Read(readMaybe)
-data Player = Player1 Char | Player2 Char deriving (Show, Eq)
+data Player = Player1 Char | Player2 Char | Winner Char deriving (Show, Eq)
 data PlayState = Play | End
 type Space = Maybe Player
 type Board = [[Space]] -- a list of columns
@@ -16,7 +16,7 @@ playLoop :: PlayState -> IO ()
 playLoop End = putStrLn "Thanks for playing!"
 playLoop Play = do
     let p1 = Player1 'x'
-    let p2 = Player2 'y'
+    let p2 = Player2 'o'
     playGame p1 p2 createBoard
     putStrLn "GAME OVER."
     putStrLn "Enter 'y' to play again or any other key to stop."
@@ -37,9 +37,10 @@ playGame t1 t2 b =
             b'<- retryingAddToken b (move - 1) t1
             let maybeWin = boardHasWin t1 b'
             case maybeWin of 
-                (Just (runLength, positions)) -> do
+                (Just (_, positions)) -> do
                     putStrLn $ show t1 ++ " wins!"
                     printBoard b'
+                    printBoard $ generateWinningBoard b' positions
                     putStrLn $ "Winning positions " ++ (show $ reverse positions)
                 Nothing -> do printBoard b'
                               playGame t2 t1 b' 
@@ -64,9 +65,19 @@ retryingAddToken b c p = let attempt = addToken b c p
                              (Right b) -> return b
 
 replace :: [a] -> Int -> a -> [a]
-replace [] i el = []
-replace (l:ls) 0 el = el:ls
-replace (l:ls) i el = l : replace ls (i-1) el
+replace xs n x = replaceWith xs n (\_ -> x)
+
+replaceWith :: [a] -> Int -> (a -> a) -> [a]
+replaceWith [] _ _ = []
+replaceWith (l:ls) 0 f = (f l):ls
+replaceWith (l:ls) i f = l : replaceWith ls (i-1) f
+
+generateWinningBoard :: Board -> [(Int,Int)] -> Board
+generateWinningBoard b xs =  foldl' bpos b xs
+                             where bpos b (r, c) = replaceWith b (c - 1) (\ls -> replace ls (r - 1) $ Just winner)
+
+winner = Winner 'W'
+
 
 addToken :: Board -> Int -> Player -> Either [Char] Board
 addToken board col player =
@@ -102,9 +113,6 @@ convertRowToString :: [Space] -> [Char]
 convertRowToString ss = unwords toStrings
     where toStrings = fmap convertSpaceToString ss 
 
-fillBoard :: Board -> Player -> Board
-fillBoard b p = fmap (\col -> fmap (\space -> Just p) col) b
-
 detectFilled :: Board -> Bool
 detectFilled b = all columnFull b
     where columnFull col = all isPlayer col
@@ -125,7 +133,9 @@ rowsHaveWin p b = let maybeWin = columnsHaveWin p $ transpose b
                           reversePositions :: (Int, [(Int, Int)]) -> (Int, [(Int, Int)])                          
                           reversePositions (run, f) = (run, fmap swap f)
                             
-diagonalLeftDownHasWin p b = diagonalRightUpHasWin p $ reverse b
+diagonalLeftDownHasWin p b = let resWithBackwardsPos = diagonalRightUpHasWin p $ reverse b
+                             in fmap (\(run, positions) -> (run, (reverse . fmap rotatePos) positions)) resWithBackwardsPos
+                                where rotatePos (r, c) = (r, 7 - c + 1)
 
 diagonalRightUpHasWin :: Player -> Board -> Maybe (Int, [(Int, Int)])
 diagonalRightUpHasWin p b = slideRight 1 4 b
@@ -181,6 +191,9 @@ detectWin pl const sps = foldl' accumRun (0, []) sps
               if pl == aplayer
                 then (count + 1, (pos, const) : run)
                 else if alreadyWon then (count, run) else reset
+
+fillBoard :: (Functor f1, Functor f2) => f1 (f2 a1) -> a2 -> f1 (f2 (Maybe a2))
+fillBoard b p = fmap (\col -> fmap (\space -> Just p) col) b
 
 printEitherBoard :: Either [Char] Board -> IO ()
 printEitherBoard x = case x of Left err -> putStrLn err; Right b -> printBoard b
