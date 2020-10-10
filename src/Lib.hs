@@ -1,13 +1,19 @@
 module Lib
     ( start
     ) where
+import GameSetup
+    ( Board,
+      Space,
+      Player,
+      createPlayer1,
+      createPlayer2,
+      createWinner,
+      symb,
+      createBoard )
 import Control.Monad
 import Data.List
 import Text.Read(readMaybe)
-data Player = Player1 Char | Player2 Char | Winner Char deriving (Show, Eq)
 data PlayState = Play | End
-type Space = Maybe Player
-type Board = [[Space]] -- a list of columns
 
 start :: IO ()
 start = playLoop Play
@@ -15,8 +21,8 @@ start = playLoop Play
 playLoop :: PlayState -> IO ()
 playLoop End = putStrLn "Thanks for playing!"
 playLoop Play = do
-    let p1 = Player1 'x'
-    let p2 = Player2 'o'
+    let p1 = createPlayer1
+    let p2 = createPlayer2
     playGame p1 p2 createBoard
     putStrLn "GAME OVER."
     putStrLn "Enter 'y' to play again or any other key to stop."
@@ -76,8 +82,7 @@ generateWinningBoard :: Board -> [(Int,Int)] -> Board
 generateWinningBoard b xs =  foldl' bpos b xs
                              where bpos b (r, c) = replaceWith b (c - 1) (\ls -> replace ls (r - 1) $ Just winner)
 
-winner = Winner 'W'
-
+winner = createWinner
 
 addToken :: Board -> Int -> Player -> Either [Char] Board
 addToken board col player =
@@ -94,10 +99,6 @@ addToColumn :: [Space] -> Player -> [Space]
 addToColumn [] _ = []
 addToColumn (x:xs) marker = if x == Nothing then Just marker:xs else x : addToColumn xs marker
 
-createBoard :: Board
-createBoard = take 7 $ cycle [makeCol]
-    where makeCol = take 6 $ cycle [Nothing]
-
 printBoard :: Board -> IO ()
 printBoard b = mapM_ putStrLn $ fmap convertRowToString $ reverse $ transpose b
 
@@ -105,9 +106,6 @@ convertSpaceToString :: Space -> [Char]
 convertSpaceToString s = case s of
     Nothing -> "   "
     Just p -> ' ' : symb p : " "
-    where symb pl = case pl of 
-            (Player1 ch1) -> ch1
-            (Player2 ch2) -> ch2
 
 convertRowToString :: [Space] -> [Char]
 convertRowToString ss = unwords toStrings
@@ -192,14 +190,16 @@ detectWin pl const sps = foldl' accumRun (0, []) sps
                 then (count + 1, (pos, const) : run)
                 else if alreadyWon then (count, run) else reset
 
+-- TEST DEFINITIONS
+
 fillBoard :: (Functor f1, Functor f2) => f1 (f2 a1) -> a2 -> f1 (f2 (Maybe a2))
 fillBoard b p = fmap (\col -> fmap (\space -> Just p) col) b
 
 printEitherBoard :: Either [Char] Board -> IO ()
 printEitherBoard x = case x of Left err -> putStrLn err; Right b -> printBoard b
 
-p1 = Player1 'X'
-p2 = Player2 'O'
+p1 = createPlayer1
+p2 = createPlayer2
 b' = createBoard
 e1 = addToken b' 1 $ p1
 e2 = e1 >>= (\b -> addToken b 1 $ p2) 

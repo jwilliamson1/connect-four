@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2e3f9fd9edd2d95b0e48672c6a9e672e04445e6e22617e4e619daa60d3ba1a22
+-- hash: d15cb73b84c98194da0d53808c2c545ce971c4884d3a263a351c3f38eb6608ec
 
 name:           c4
 version:        0.1.0.0
@@ -27,6 +27,7 @@ source-repository head
 
 library
   exposed-modules:
+      GameSetup
       Lib
   other-modules:
       Paths_c4
