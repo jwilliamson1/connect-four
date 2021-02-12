@@ -13,6 +13,8 @@ import GameSetup
 import Control.Monad
 import Data.List
 import Text.Read(readMaybe)
+import Data.Maybe
+import Data.Bifunctor
 data PlayState = Play | End
 
 start :: IO ()
@@ -42,22 +44,22 @@ playGame t1 t2 b =
             move <- safeReadInt :: IO Int
             b'<- retryingAddToken b (move - 1) t1
             let maybeWin = boardHasWin t1 b'
-            case maybeWin of 
+            case maybeWin of
                 (Just (_, positions)) -> do
                     putStrLn $ show t1 ++ " wins!"
                     printBoard b'
                     printBoard $ generateWinningBoard b' positions
-                    putStrLn $ "Winning positions " ++ (show $ reverse positions)
+                    putStrLn $ "Winning positions " ++ show (reverse positions)
                 Nothing -> do printBoard b'
-                              playGame t2 t1 b' 
-               
+                              playGame t2 t1 b'
+
 safeReadInt :: IO Int
-safeReadInt = do 
+safeReadInt = do
     str <- getLine
     let attempt = readMaybe str :: Maybe Int
     case attempt of
         (Just r) -> return r
-        (_) -> do
+        _ -> do
             putStrLn "Invalid input, must be between 1-7."
             safeReadInt
 
@@ -71,11 +73,11 @@ retryingAddToken b c p = let attempt = addToken b c p
                              (Right b) -> return b
 
 replace :: [a] -> Int -> a -> [a]
-replace xs n x = replaceWith xs n (\_ -> x)
+replace xs n x = replaceWith xs n (const x)
 
 replaceWith :: [a] -> Int -> (a -> a) -> [a]
 replaceWith [] _ _ = []
-replaceWith (l:ls) 0 f = (f l):ls
+replaceWith (l:ls) 0 f = f l:ls
 replaceWith (l:ls) i f = l : replaceWith ls (i-1) f
 
 generateWinningBoard :: Board -> [(Int,Int)] -> Board
@@ -91,13 +93,11 @@ addToken board col player =
     in if canAddToColumn selectedColumn
         then Right $ replace board col $ addToColumn selectedColumn player
         else Left $ "Cannot add to column: " ++ show col
-        where canAddToColumn column = if column !! 5 == Nothing && column /= []
-                then True
-                else False
+        where canAddToColumn column = isNothing (column !! 5) && column /= []
 
 addToColumn :: [Space] -> Player -> [Space]
 addToColumn [] _ = []
-addToColumn (x:xs) marker = if x == Nothing then Just marker:xs else x : addToColumn xs marker
+addToColumn (x:xs) marker = if isNothing x then Just marker:xs else x : addToColumn xs marker
 
 printBoard :: Board -> IO ()
 printBoard b = mapM_ putStrLn $ fmap convertRowToString $ reverse $ transpose b
@@ -109,7 +109,7 @@ convertSpaceToString s = case s of
 
 convertRowToString :: [Space] -> [Char]
 convertRowToString ss = unwords toStrings
-    where toStrings = fmap convertSpaceToString ss 
+    where toStrings = fmap convertSpaceToString ss
 
 detectFilled :: Board -> Bool
 detectFilled b = all columnFull b
@@ -127,12 +127,12 @@ boardHasWin p b = let colWin = columnsHaveWin p b
                       in msum wins
 rowsHaveWin p b = let maybeWin = columnsHaveWin p $ transpose b
                     in fmap reversePositions maybeWin
-                    where swap (r,c) = (c, r) 
-                          reversePositions :: (Int, [(Int, Int)]) -> (Int, [(Int, Int)])                          
+                    where swap (r,c) = (c, r)
+                          reversePositions :: (Int, [(Int, Int)]) -> (Int, [(Int, Int)])
                           reversePositions (run, f) = (run, fmap swap f)
-                            
+
 diagonalLeftDownHasWin p b = let resWithBackwardsPos = diagonalRightUpHasWin p $ reverse b
-                             in fmap (\(run, positions) -> (run, (reverse . fmap rotatePos) positions)) resWithBackwardsPos
+                             in fmap (second (reverse . fmap rotatePos)) resWithBackwardsPos
                                 where rotatePos (r, c) = (r, 7 - c + 1)
 
 diagonalRightUpHasWin :: Player -> Board -> Maybe (Int, [(Int, Int)])
@@ -141,31 +141,37 @@ diagonalRightUpHasWin p b = slideRight 1 4 b
                                 else let downRes = slideDown 1 3 p cols s
                                         in case downRes of
                                             (Just a) -> Just a
-                                            _ -> slideRight (s + 1) e (drop 1 cols) 
+                                            _ -> slideRight (s + 1) e (drop 1 cols)
 
 slideDown :: Int -> Int -> Player -> [[Space]] -> Int -> Maybe (Int, [(Int, Int)])
 slideDown sr er p cols' curCol = if sr == (er + 1) then Nothing
 else let diagRes = checkDiagonal4 sr curCol p cols'
-        in case diagRes of 
+        in case diagRes of
             (Just a) -> Just a
-            _ -> slideDown (sr + 1) er p (fmap tail cols') curCol 
+            _ -> slideDown (sr + 1) er p (fmap tail cols') curCol
 
 checkDiagonal4 :: Int -> Int -> Player -> [[Space]] -> Maybe (Int, [(Int, Int)])
 checkDiagonal4 r c p b = let playersMatch a b c' d = a == p && b == p && c' == p && d == p
-                             c1 = b !! 0 !! 0
+                             c1 = head (head b)
                              c2 = b !! 1 !! 1
                              c3 = b !! 2 !! 2
                              c4 = b !! 3 !! 3
                              in let res = playersMatch <$> c1 <*> c2 <*> c3 <*> c4
                                 in res >>= (\match -> if match then Just (4, [(r+3, c+3), (r+2, c+2),  (r+1, c+1), (r,c) ]) else Nothing)
 
+--checkDiagonal :: Player -> Board -> Maybe [(Int, Int)]
+--checkDiagonal p b = 
+
+--safeHead :: a => [a] -> Maybe a
+--safeHead [] = Nothing
+--safeHead xs = Just xs
 
 columnsHaveWin :: Player -> Board -> Maybe (Int, [(Int, Int)])
-columnsHaveWin p b = let checkForPlayer = lineHasWin p
-                    in let maybeWins = fmap checkForPlayer $ zip b [1..]
+columnsHaveWin p b = let checkForPlayer l = lineHasWin p l
+                    in let maybeWins = checkForPlayer <$> zip b [1..]
                            winningLines = filter hasWin maybeWins
-                           in if length winningLines > 0 then head winningLines else Nothing 
-                        where 
+                           in if not (null winningLines) then head winningLines else Nothing
+                        where
                             hasWin :: Maybe (Int, [(Int, Int)]) -> Bool
                             hasWin m = case m of
                                 Just _ -> True
@@ -182,7 +188,7 @@ detectWin pl const sps = foldl' accumRun (0, []) sps
     reset = (0, [])
     accumRun :: (Int, [(Int, Int)]) -> (Space, Int) -> (Int, [(Int, Int)])
     accumRun (count, run) sp =
-      let alreadyWon = (length run) >= 4
+      let alreadyWon = length run >= 4
        in case sp of
             (Nothing, _) -> if alreadyWon then (count, run) else reset
             (Just aplayer, pos) ->
@@ -193,7 +199,7 @@ detectWin pl const sps = foldl' accumRun (0, []) sps
 -- TEST DEFINITIONS
 
 fillBoard :: (Functor f1, Functor f2) => f1 (f2 a1) -> a2 -> f1 (f2 (Maybe a2))
-fillBoard b p = fmap (\col -> fmap (\space -> Just p) col) b
+fillBoard b p = fmap (fmap (\space -> Just p)) b
 
 printEitherBoard :: Either [Char] Board -> IO ()
 printEitherBoard x = case x of Left err -> putStrLn err; Right b -> printBoard b
@@ -201,11 +207,11 @@ printEitherBoard x = case x of Left err -> putStrLn err; Right b -> printBoard b
 p1 = createPlayer1
 p2 = createPlayer2
 b' = createBoard
-e1 = addToken b' 1 $ p1
-e2 = e1 >>= (\b -> addToken b 1 $ p2) 
+e1 = addToken b' 1 p1
+e2 = e1 >>= (\b -> addToken b 1 p2)
 e3 = do
-    e1 <- addToken b' 1 $ p1
-    e2 <- addToken e1 1 $ p2
+    e1 <- addToken b' 1 p1
+    e2 <- addToken e1 1 p2
     addToken e2 0 p1
 fp1 = fillBoard b' p1
 fp2 = fillBoard b' p2
